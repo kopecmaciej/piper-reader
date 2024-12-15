@@ -38,10 +38,18 @@ pub fn download_button(window: &ApplicationWindow, voice: Rc<RefCell<Voice>>) ->
                 voice,
                 async move {
                     if !voice.borrow().downloaded {
+                        button.set_sensitive(false);
                         let files = voice.borrow().files.clone();
-                        if let Err(e) = runtime().block_on(VoiceManager::download_voice(&files)) {
-                            let err_msg = format!("Failed to download voice: {}", e);
-                            return show_alert(&window, &err_msg);
+                        let download_result = runtime()
+                            .spawn(clone!(async move {
+                                if let Err(e) = VoiceManager::download_voice(&files).await {
+                                    eprintln!("{}", e);
+                                }
+                            }))
+                            .await;
+
+                        if download_result.is_err() {
+                            return show_alert(&window, "Download failed");
                         }
 
                         let mut voice_ref = voice.borrow_mut();
@@ -56,6 +64,7 @@ pub fn download_button(window: &ApplicationWindow, voice: Rc<RefCell<Voice>>) ->
                             show_alert(&window, "Error while setting default voice");
                         }
                         button.set_icon_name(SET_VOICE_DEFAULT_ICON);
+                        button.set_sensitive(true);
                     } else {
                         let key = voice.borrow().key.clone();
                         if let Err(e) = SpeechDispatcher::set_default_voice(&key) {
